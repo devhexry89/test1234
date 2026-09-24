@@ -4338,6 +4338,18 @@ if mobile then
                             local columns = items["Columns"] and items["Columns"].Instance
                             if columns then
                                 columns.Position = UDim2New(0, 0, 0, page.Search and 100 or 55)
+                                columns.Visible = true
+                            end
+
+                            local subPage = other.SubPage
+                            local subItems = subPage and subPage.Items
+                            local subContent = subItems and subItems["PageContent"] and subItems["PageContent"].Instance
+                            if subContent then
+                                subContent.Visible = true
+                                local left = subItems["Left"] and subItems["Left"].Instance
+                                local right = subItems["Right"] and subItems["Right"].Instance
+                                if left then left.Visible = true end
+                                if right then right.Visible = true end
                             end
                         end)
                     end
@@ -4359,6 +4371,12 @@ if mobile then
                             end
                             if unused and unused.Instance then
                                 content.Parent = unused.Instance
+                            end
+                            local subPage = other.SubPage
+                            local subItems = subPage and subPage.Items
+                            local subContent = subItems and subItems["PageContent"] and subItems["PageContent"].Instance
+                            if subContent then
+                                subContent.Visible = false
                             end
                         end)
                     end
@@ -4384,27 +4402,43 @@ if mobile then
     function MobileBeacon:CreateTab(cfg)
         cfg = cfg or {}
 
+        -- A Beacon tab maps to a REAL mobile Page. The mobile library's
+        -- Section API belongs to a SubPage, so every Beacon tab gets one
+        -- private SubPage underneath it. The SubPage navigation itself is
+        -- hidden; the visible navigation remains the mobile Page icons.
         local page = self._mobile:Page({
             Icon = cfg.Icon or "109391165290124",
             Search = cfg.Search or false,
         })
 
+        local subPage = page:SubPage({
+            Name = cfg.Name or "Tab",
+        })
+
+        pcall(function()
+            local subPages = page.Items and page.Items["SubPages"]
+            if subPages and subPages.Instance then
+                subPages.Instance.Visible = false
+            end
+        end)
+
         local tab = setmetatable({
             Window = self,
             Page = page,
+            SubPage = subPage,
             Name = cfg.Name or "Tab",
-            _mobile = page,
+            _mobile = subPage,
             _flip = 0,
         }, MobileTab)
 
         table.insert(self.Tabs, tab)
 
-        -- Replace the library's page click behavior with Beacon-aware tab
-        -- selection so the adapter always knows which tab is active.
+        -- Clicking the actual mobile Page icon selects this Beacon tab.
         page._OnSelect = function()
             self:_selectTab(tab)
         end
 
+        -- Make the first tab visible and every later tab hidden.
         if not self.Active then
             self:_selectTab(tab)
         else
@@ -4419,19 +4453,30 @@ if mobile then
         local side = opts.Side or ((self._flip % 2 == 0) and "Left" or "Right")
         self._flip = self._flip + 1
 
-        -- Sections belong directly to the Page. This gives each Beacon tab
-        -- its own independent left/right columns and avoids inactive SubPages.
+        -- Sections MUST be created on the mobile SubPage, not directly on
+        -- Page. The mobile library stores Left/Right columns on SubPage.
         local section = self._mobile:Section({
             Name = title or "Panel",
             Side = side,
         })
 
         pcall(function()
-            local pageContent = self.Page.Items["PageContent"]
+            local pageContent = self.Page.Items and self.Page.Items["PageContent"]
             if pageContent and pageContent.Instance then
                 pageContent.Instance.Visible = (self.Window.Active == self)
             end
-            local sectionFrame = section.Items["Section"]
+
+            local subContent = self.SubPage.Items and self.SubPage.Items["PageContent"]
+            if subContent and subContent.Instance then
+                subContent.Instance.Visible = (self.Window.Active == self)
+            end
+
+            local columns = self.Page.Items and self.Page.Items["Columns"]
+            if columns and columns.Instance then
+                columns.Instance.Position = UDim2New(0, 0, 0, self.Page.Search and 100 or 55)
+            end
+
+            local sectionFrame = section.Items and section.Items["Section"]
             if sectionFrame and sectionFrame.Instance then
                 sectionFrame.Instance.Visible = true
             end
